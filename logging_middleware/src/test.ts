@@ -1,38 +1,72 @@
+import * as http from "http";
 import { configureLogger, Log } from "./index";
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiYXVkIjoiaHR0cDovLzIwLjI0NC41Ni4xNDQvZXZhbHVhdGlvbi1zZXJ2aWNlIiwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsImV4cCI6MTc3NzY5OTU3OSwiaWF0IjoxNzc3Njk4Njc5LCJpc3MiOiJBZmZvcmQgTWVkaWNhbCBUZWNobm9sb2dpZXMgUHJpdmF0ZSBMaW1pdGVkIiwianRpIjoiZmMzNDBiNjUtMTE2Mi00MDc2LWE5ZjEtZGFiZjgyMWZlNTc4IiwibG9jYWxlIjoiZW4tSU4iLCJuYW1lIjoiYXJwaXQgcmFqYW4iLCJzdWIiOiJlYzc2MzY2My1jMmQyLTQ3YmEtYTMwZS03Y2Q5OWEyMGVlMzAifSwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsIm5hbWUiOiJhcnBpdCByYWphbiIsInJvbGxObyI6InJhMjMxMTAwMzAxMDU0MyIsImFjY2Vzc0NvZGUiOiJRa2JweEgiLCJjbGllbnRJRCI6ImVjNzYzNjYzLWMyZDItNDdiYS1hMzBlLTdjZDk5YTIwZWUzMCIsImNsaWVudFNlY3JldCI6InRoRFJUV3hLTU13TXlyZlYifQ.CEutHtFLtU3ErqKNocP8Bo0X7W-iTP6fsbrJ4SYZG4o";
+const CLIENT_ID     = "ec763663-c2d2-47ba-a30e-7cd99a20ee30";
+const CLIENT_SECRET = "thDRTWxKMMwMyrfV";
+const EMAIL         = "ar1132@srmist.edu.in";
+const NAME          = "arpit rajan";
+const ROLL_NO       = "ra2311003010543";
+const ACCESS_CODE   = "QkbpxH";
 
-configureLogger({
-  serverUrl: "http://20.207.122.201",
-  authToken: TOKEN,
-  minLevel: "debug",
-  consoleOutput: true,
-});
+function getToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      email: EMAIL, name: NAME, rollNo: ROLL_NO,
+      accessCode: ACCESS_CODE, clientID: CLIENT_ID, clientSecret: CLIENT_SECRET,
+    });
+    const req = http.request({
+      hostname: "20.207.122.201", port: 80,
+      path: "/evaluation-service/auth", method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data) as { access_token: string };
+          resolve(parsed.access_token);
+        } catch {
+          reject(new Error("Failed to parse auth response"));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 (async () => {
-  await Log("backend", "error", "handler", "received string, expected bool");
-  await Log("backend", "fatal", "service", "Critical database connection failure.");
+  const token = await getToken();
 
-  await Log("backend", "debug",  "config",      "Loading environment configuration");
-  await Log("backend", "info",   "route",        "HTTP server listening on port 3000");
-  await Log("backend", "info",   "middleware",   "Request received: GET /api/users");
-  await Log("backend", "debug",  "repository",   "Executing SQL: SELECT * FROM users WHERE id=$1");
-  await Log("backend", "info",   "service",      "Business rule validated – proceeding with transaction");
-  await Log("backend", "warn",   "cache",        "Cache miss for key 'user:42' – falling back to DB");
-  await Log("backend", "warn",   "controller",   "Deprecated API endpoint /v1/ping called");
-  await Log("backend", "error",  "handler",      "Unhandled exception in POST /api/orders – TypeError");
-  await Log("backend", "fatal",  "service",      "Maximum retry attempts reached – shutting down worker");
-  await Log("backend", "info",   "auth",         "JWT token issued for userId=99 with 1h expiry");
-  await Log("backend", "error",  "auth",         "JWT verification failed – token expired");
-  await Log("backend", "info",   "utils",        "Date formatted to ISO-8601 successfully");
-  await Log("backend", "info",   "cron_job",     "Scheduled task 'cleanup_sessions' triggered");
-  await Log("backend", "warn",   "dh",           "Data hydration skipped for optional field 'avatar'");
-  await Log("backend", "debug",  "domain",       "Domain entity User constructed with id=7");
+  configureLogger({
+    serverUrl: "http://20.207.122.201",
+    authToken: token,
+    minLevel: "debug",
+    consoleOutput: true,
+  });
 
+  await Log("backend", "error",  "handler",    "received string, expected bool");
+  await Log("backend", "fatal",  "service",    "Critical db connection failure");
+  await Log("backend", "debug",  "config",     "Loading environment config");
+  await Log("backend", "info",   "route",      "HTTP server listening on port 3000");
+  await Log("backend", "info",   "middleware",  "Request received: GET /api/users");
+  await Log("backend", "debug",  "repository", "SQL: SELECT * FROM users WHERE id=$1");
+  await Log("backend", "info",   "service",    "Business rule validated");
+  await Log("backend", "warn",   "cache",      "Cache miss for user:42");
+  await Log("backend", "warn",   "controller", "Deprecated endpoint /v1/ping called");
+  await Log("backend", "error",  "handler",    "Unhandled exception in POST /api/orders");
+  await Log("backend", "fatal",  "service",    "Max retries reached – shutting down");
+  await Log("backend", "info",   "auth",       "JWT issued for userId=99 ttl=1h");
+  await Log("backend", "error",  "auth",       "JWT verification failed – expired");
+  await Log("backend", "info",   "utils",      "Date formatted to ISO-8601");
+  await Log("backend", "info",   "cron_job",   "Task cleanup_sessions triggered");
+  await Log("backend", "warn",   "utils",      "Hydration skipped for avatar field");
+  await Log("backend", "debug",  "domain",     "User entity constructed id=7");
   await Log("frontend", "info",  "page",       "Dashboard page mounted");
-  await Log("frontend", "debug", "component",  "Navbar re-render triggered by prop change: theme");
-  await Log("frontend", "info",  "api",        "GET /api/notifications returned 200 – 5 items");
-  await Log("frontend", "warn",  "state",      "Redux store updated with stale data – force refresh recommended");
-  await Log("frontend", "error", "hook",       "useAuth: failed to refresh session token");
+  await Log("frontend", "debug", "component",  "Navbar re-render: theme prop changed");
+  await Log("frontend", "info",  "api",        "GET /api/notifications 200 5 items");
+  await Log("frontend", "warn",  "state",      "Store updated with stale data");
+  await Log("frontend", "error", "hook",       "useAuth: session token refresh failed");
   await Log("frontend", "debug", "style",      "Theme toggled to dark mode");
 })();

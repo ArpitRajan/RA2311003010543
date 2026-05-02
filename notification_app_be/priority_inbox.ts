@@ -92,10 +92,10 @@ class MinHeap {
 }
 
 async function fetchNotifications(): Promise<RawNotification[]> {
-  await Log("frontend", "info", "api", "Fetching notifications from evaluation-service");
+  await Log("frontend", "info", "api", "Fetching notifications");
   const res = await fetch(`${BASE_URL}/notifications`, { headers: HEADERS });
   if (!res.ok) {
-    await Log("frontend", "error", "api", `Notifications API returned HTTP ${res.status}`);
+    await Log("frontend", "error", "api", `Notifications API error ${res.status}`);
     throw new Error(`Notifications fetch failed: ${res.status}`);
   }
   const data = await res.json() as { notifications: RawNotification[] };
@@ -132,16 +132,16 @@ function printInbox(top: ScoredNotification[]): void {
 
     const notifications = await fetchNotifications();
 
-    await Log("frontend", "debug", "state", `Scoring ${notifications.length} notifications by type-weight and recency`);
+    await Log("frontend", "debug", "state", `Scoring ${notifications.length} notifications`);
 
     const top10 = buildPriorityInbox(notifications, 10);
 
     printInbox(top10);
 
-    await Log("frontend", "info", "page", `Priority Inbox ready – displaying top ${top10.length} notifications`);
+    await Log("frontend", "info", "page", `Inbox ready, top ${top10.length} shown`);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    await Log("frontend", "fatal", "page", `Priority Inbox failed: ${msg}`);
+    await Log("frontend", "fatal", "page", `Inbox failed: ${msg}`.slice(0, 48));
     process.exit(1);
   }
 })();

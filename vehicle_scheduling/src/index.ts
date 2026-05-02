@@ -36,7 +36,7 @@ configureLogger({
 });
 
 async function fetchDepots(): Promise<Depot[]> {
-  await Log("backend", "info", "service", "Fetching depot list from evaluation-service");
+  await Log("backend", "info", "service", "Fetching depot list");
   const res = await fetch(`${BASE_URL}/depots`, { headers: HEADERS });
   if (!res.ok) {
     await Log("backend", "error", "service", `Depot API returned HTTP ${res.status}`);
@@ -48,14 +48,14 @@ async function fetchDepots(): Promise<Depot[]> {
 }
 
 async function fetchVehicles(): Promise<Vehicle[]> {
-  await Log("backend", "info", "service", "Fetching vehicle task list from evaluation-service");
+  await Log("backend", "info", "service", "Fetching vehicle task list");
   const res = await fetch(`${BASE_URL}/vehicles`, { headers: HEADERS });
   if (!res.ok) {
     await Log("backend", "error", "service", `Vehicles API returned HTTP ${res.status}`);
     throw new Error(`Vehicles fetch failed: ${res.status}`);
   }
   const data = await res.json() as { vehicles: Vehicle[] };
-  await Log("backend", "info", "service", `Retrieved ${data.vehicles.length} vehicle tasks`);
+  await Log("backend", "info", "service", `Fetched ${data.vehicles.length} vehicles`);
   return data.vehicles;
 }
 
@@ -89,7 +89,7 @@ async function schedule(depots: Depot[], vehicles: Vehicle[]): Promise<ScheduleR
   const results: ScheduleResult[] = [];
 
   for (const depot of depots) {
-    await Log("backend", "debug", "service", `Running knapsack for depot ${depot.ID} with ${depot.MechanicHours}h budget`);
+    await Log("backend", "debug", "service", `Knapsack depot ${depot.ID} budget ${depot.MechanicHours}h`);
 
     const { totalImpact, selected } = knapsack(vehicles, depot.MechanicHours);
     const totalDuration = selected.reduce((sum, v) => sum + v.Duration, 0);
@@ -104,9 +104,7 @@ async function schedule(depots: Depot[], vehicles: Vehicle[]): Promise<ScheduleR
 
     results.push(result);
 
-    await Log("backend", "info", "service",
-      `Depot ${depot.ID}: selected ${selected.length} tasks | duration=${totalDuration}h / ${depot.MechanicHours}h | impact=${totalImpact}`
-    );
+    await Log("backend", "info", "service", `Depot ${depot.ID}: impact=${totalImpact}`);
   }
 
   return results;
@@ -131,20 +129,20 @@ function printResults(results: ScheduleResult[]): void {
 
 (async () => {
   try {
-    await Log("backend", "info", "service", "Vehicle Maintenance Scheduler starting");
+    await Log("backend", "info", "service", "Scheduler starting");
 
     const [depots, vehicles] = await Promise.all([fetchDepots(), fetchVehicles()]);
 
-    await Log("backend", "debug", "service", `Loaded ${depots.length} depots and ${vehicles.length} vehicle tasks`);
+    await Log("backend", "debug", "service", `Loaded ${depots.length} depots, ${vehicles.length} vehicles`);
 
     const results = await schedule(depots, vehicles);
 
     printResults(results);
 
-    await Log("backend", "info", "service", "Vehicle Maintenance Scheduler completed successfully");
+    await Log("backend", "info", "service", "Scheduler completed");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    await Log("backend", "fatal", "service", `Scheduler terminated with error: ${msg}`);
+    await Log("backend", "fatal", "service", `Scheduler error: ${msg}`.slice(0, 48));
     process.exit(1);
   }
 })();

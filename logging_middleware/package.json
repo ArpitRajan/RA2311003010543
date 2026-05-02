@@ -1,0 +1,20 @@
+{
+  "name": "@ra2311003010543/logger",
+  "version": "1.0.0",
+  "description": "Reusable logging middleware that ships log events to the evaluation-service API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "ts-node src/test.ts"
+  },
+  "keywords": ["logging", "middleware", "typescript"],
+  "author": "RA2311003010543",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.14.0"
+  }
+}

@@ -1,13 +1,14 @@
+import * as http from "http";
 import { Log, configureLogger } from "../logging_middleware/src/index";
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiYXVkIjoiaHR0cDovLzIwLjI0NC41Ni4xNDQvZXZhbHVhdGlvbi1zZXJ2aWNlIiwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsImV4cCI6MTc3NzcwMzI1OSwiaWF0IjoxNzc3NzAyMzU5LCJpc3MiOiJBZmZvcmQgTWVkaWNhbCBUZWNobm9sb2dpZXMgUHJpdmF0ZSBMaW1pdGVkIiwianRpIjoiZGViMDI3NTEtNWY4ZS00OTlmLWFjZjAtM2YwZGQxNTZlY2IxIiwibG9jYWxlIjoiZW4tSU4iLCJuYW1lIjoiYXJwaXQgcmFqYW4iLCJzdWIiOiJlYzc2MzY2My1jMmQyLTQ3YmEtYTMwZS03Y2Q5OWEyMGVlMzAifSwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsIm5hbWUiOiJhcnBpdCByYWphbiIsInJvbGxObyI6InJhMjMxMTAwMzAxMDU0MyIsImFjY2Vzc0NvZGUiOiJRa2JweEgiLCJjbGllbnRJRCI6ImVjNzYzNjYzLWMyZDItNDdiYS1hMzBlLTdjZDk5YTIwZWUzMCIsImNsaWVudFNlY3JldCI6InRoRFJUV3hLTU13TXlyZlYifQ.oVLMMGm9RWy4C6glzTrI1I8vhcHW52oP8jncAfgoZyk";
+const CLIENT_ID     = "ec763663-c2d2-47ba-a30e-7cd99a20ee30";
+const CLIENT_SECRET = "thDRTWxKMMwMyrfV";
+const EMAIL         = "ar1132@srmist.edu.in";
+const NAME          = "arpit rajan";
+const ROLL_NO       = "ra2311003010543";
+const ACCESS_CODE   = "QkbpxH";
 
 const BASE_URL = "http://20.207.122.201/evaluation-service";
-
-const HEADERS = {
-  "Authorization": `Bearer ${TOKEN}`,
-  "Content-Type": "application/json",
-};
 
 type NotificationType = "Placement" | "Result" | "Event";
 
@@ -22,18 +23,39 @@ interface ScoredNotification extends RawNotification {
   priorityScore: number;
 }
 
-configureLogger({
-  serverUrl: "http://20.207.122.201",
-  authToken: TOKEN,
-  minLevel: "debug",
-  consoleOutput: true,
-});
-
 const TYPE_WEIGHT: Record<NotificationType, number> = {
   Placement: 3,
   Result: 2,
   Event: 1,
 };
+
+function getToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      email: EMAIL, name: NAME, rollNo: ROLL_NO,
+      accessCode: ACCESS_CODE, clientID: CLIENT_ID, clientSecret: CLIENT_SECRET,
+    });
+    const req = http.request({
+      hostname: "20.207.122.201", port: 80,
+      path: "/evaluation-service/auth", method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    }, (res) => {
+      let data = "";
+      res.on("data", (chunk: string) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data) as { access_token: string };
+          resolve(parsed.access_token);
+        } catch {
+          reject(new Error("Failed to parse auth response"));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 function computeScore(n: RawNotification): number {
   const weight = TYPE_WEIGHT[n.Type];
@@ -91,9 +113,9 @@ class MinHeap {
   size(): number { return this.heap.length; }
 }
 
-async function fetchNotifications(): Promise<RawNotification[]> {
+async function fetchNotifications(headers: Record<string, string>): Promise<RawNotification[]> {
   await Log("frontend", "info", "api", "Fetching notifications");
-  const res = await fetch(`${BASE_URL}/notifications`, { headers: HEADERS });
+  const res = await fetch(`${BASE_URL}/notifications`, { headers });
   if (!res.ok) {
     await Log("frontend", "error", "api", `Notifications API error ${res.status}`);
     throw new Error(`Notifications fetch failed: ${res.status}`);
@@ -105,12 +127,10 @@ async function fetchNotifications(): Promise<RawNotification[]> {
 
 function buildPriorityInbox(notifications: RawNotification[], topN: number): ScoredNotification[] {
   const heap = new MinHeap(topN);
-
   for (const n of notifications) {
     const scored: ScoredNotification = { ...n, priorityScore: computeScore(n) };
     heap.push(scored);
   }
-
   return heap.getTopN();
 }
 
@@ -128,9 +148,23 @@ function printInbox(top: ScoredNotification[]): void {
 
 (async () => {
   try {
+    const token = await getToken();
+
+    configureLogger({
+      serverUrl: "http://20.207.122.201",
+      authToken: token,
+      minLevel: "debug",
+      consoleOutput: true,
+    });
+
+    const HEADERS = {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
     await Log("frontend", "info", "page", "Priority Inbox initialising");
 
-    const notifications = await fetchNotifications();
+    const notifications = await fetchNotifications(HEADERS);
 
     await Log("frontend", "debug", "state", `Scoring ${notifications.length} notifications`);
 

@@ -1,13 +1,14 @@
+import * as http from "http";
 import { Log, configureLogger } from "../../logging_middleware/src/index";
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiYXVkIjoiaHR0cDovLzIwLjI0NC41Ni4xNDQvZXZhbHVhdGlvbi1zZXJ2aWNlIiwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsImV4cCI6MTc3NzcwMzI1OSwiaWF0IjoxNzc3NzAyMzU5LCJpc3MiOiJBZmZvcmQgTWVkaWNhbCBUZWNobm9sb2dpZXMgUHJpdmF0ZSBMaW1pdGVkIiwianRpIjoiZGViMDI3NTEtNWY4ZS00OTlmLWFjZjAtM2YwZGQxNTZlY2IxIiwibG9jYWxlIjoiZW4tSU4iLCJuYW1lIjoiYXJwaXQgcmFqYW4iLCJzdWIiOiJlYzc2MzY2My1jMmQyLTQ3YmEtYTMwZS03Y2Q5OWEyMGVlMzAifSwiZW1haWwiOiJhcjExMzJAc3JtaXN0LmVkdS5pbiIsIm5hbWUiOiJhcnBpdCByYWphbiIsInJvbGxObyI6InJhMjMxMTAwMzAxMDU0MyIsImFjY2Vzc0NvZGUiOiJRa2JweEgiLCJjbGllbnRJRCI6ImVjNzYzNjYzLWMyZDItNDdiYS1hMzBlLTdjZDk5YTIwZWUzMCIsImNsaWVudFNlY3JldCI6InRoRFJUV3hLTU13TXlyZlYifQ.oVLMMGm9RWy4C6glzTrI1I8vhcHW52oP8jncAfgoZyk";
+const CLIENT_ID     = "ec763663-c2d2-47ba-a30e-7cd99a20ee30";
+const CLIENT_SECRET = "thDRTWxKMMwMyrfV";
+const EMAIL         = "ar1132@srmist.edu.in";
+const NAME          = "arpit rajan";
+const ROLL_NO       = "ra2311003010543";
+const ACCESS_CODE   = "QkbpxH";
 
 const BASE_URL = "http://20.207.122.201/evaluation-service";
-
-const HEADERS = {
-  "Authorization": `Bearer ${TOKEN}`,
-  "Content-Type": "application/json",
-};
 
 interface Depot {
   ID: number;
@@ -28,16 +29,37 @@ interface ScheduleResult {
   selectedTasks: string[];
 }
 
-configureLogger({
-  serverUrl: "http://20.207.122.201",
-  authToken: TOKEN,
-  minLevel: "debug",
-  consoleOutput: true,
-});
+function getToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      email: EMAIL, name: NAME, rollNo: ROLL_NO,
+      accessCode: ACCESS_CODE, clientID: CLIENT_ID, clientSecret: CLIENT_SECRET,
+    });
+    const req = http.request({
+      hostname: "20.207.122.201", port: 80,
+      path: "/evaluation-service/auth", method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+    }, (res) => {
+      let data = "";
+      res.on("data", (chunk: string) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data) as { access_token: string };
+          resolve(parsed.access_token);
+        } catch {
+          reject(new Error("Failed to parse auth response"));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
 
-async function fetchDepots(): Promise<Depot[]> {
+async function fetchDepots(headers: Record<string, string>): Promise<Depot[]> {
   await Log("backend", "info", "service", "Fetching depot list");
-  const res = await fetch(`${BASE_URL}/depots`, { headers: HEADERS });
+  const res = await fetch(`${BASE_URL}/depots`, { headers });
   if (!res.ok) {
     await Log("backend", "error", "service", `Depot API returned HTTP ${res.status}`);
     throw new Error(`Depot fetch failed: ${res.status}`);
@@ -47,9 +69,9 @@ async function fetchDepots(): Promise<Depot[]> {
   return data.depots;
 }
 
-async function fetchVehicles(): Promise<Vehicle[]> {
+async function fetchVehicles(headers: Record<string, string>): Promise<Vehicle[]> {
   await Log("backend", "info", "service", "Fetching vehicle task list");
-  const res = await fetch(`${BASE_URL}/vehicles`, { headers: HEADERS });
+  const res = await fetch(`${BASE_URL}/vehicles`, { headers });
   if (!res.ok) {
     await Log("backend", "error", "service", `Vehicles API returned HTTP ${res.status}`);
     throw new Error(`Vehicles fetch failed: ${res.status}`);
@@ -103,7 +125,6 @@ async function schedule(depots: Depot[], vehicles: Vehicle[]): Promise<ScheduleR
     };
 
     results.push(result);
-
     await Log("backend", "info", "service", `Depot ${depot.ID}: impact=${totalImpact}`);
   }
 
@@ -129,9 +150,23 @@ function printResults(results: ScheduleResult[]): void {
 
 (async () => {
   try {
+    const token = await getToken();
+
+    configureLogger({
+      serverUrl: "http://20.207.122.201",
+      authToken: token,
+      minLevel: "debug",
+      consoleOutput: true,
+    });
+
+    const HEADERS = {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
     await Log("backend", "info", "service", "Scheduler starting");
 
-    const [depots, vehicles] = await Promise.all([fetchDepots(), fetchVehicles()]);
+    const [depots, vehicles] = await Promise.all([fetchDepots(HEADERS), fetchVehicles(HEADERS)]);
 
     await Log("backend", "debug", "service", `Loaded ${depots.length} depots, ${vehicles.length} vehicles`);
 
